@@ -1,0 +1,5 @@
+.src/
+_site/
+hub/_generated/
+hub/_build/
+__pycache__/

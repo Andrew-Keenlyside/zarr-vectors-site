@@ -1,0 +1,4 @@
+# site path      repo                                  ref    docs dir   zv_site key
+spec             AllenInstitute/zarr_vectors           main   docs       spec
+python           AllenInstitute/zarr-vectors-py        main   docs       python
+tools            AllenInstitute/zarr-vectors-tools     main   docs       tools
