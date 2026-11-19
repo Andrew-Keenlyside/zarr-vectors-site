@@ -31,7 +31,10 @@
     <a class="zv-bar-link" href="#ecosystem">Ecosystem</a>
     <a class="zv-bar-link" href="@ngplatform">ngplatform<span class="zv-ext" aria-hidden="true">&#8599;</span></a>
   </span>
-  <a class="zv-bar-gh" href="@github" aria-label="Zarr Vectors on GitHub">@github-svg</a>
+  <span class="zv-bar-end">
+    <button class="tt" type="button" id="theme-toggle" data-mode="auto" aria-label="Colour theme: match system">@theme-icons</button>
+    <a class="zv-bar-gh" href="@github" aria-label="Zarr Vectors on GitHub">@github-svg</a>
+  </span>
 </nav>
 
 <main id="main">

@@ -62,8 +62,21 @@ def eco_compact():
     return "".join(out)
 
 
+def theme_icons():
+    """Furo's four theme icons, as inline SVG for the front door's toggle."""
+    import furo
+    src = open(os.path.join(os.path.dirname(furo.__file__), "theme", "furo", "partials", "icons.html")).read()
+    out = []
+    for sym, cls in (("svg-sun-with-moon", "i-auto-light"), ("svg-moon-with-sun", "i-auto-dark"), ("svg-moon", "i-dark"), ("svg-sun", "i-light")):
+        m = re.search(r'<symbol id="' + sym + r'"[^>]*>.*?(<svg .*?</svg>)\s*</symbol>', src, re.S)
+        svg = re.sub(r"<title>.*?</title>", "", m.group(1), flags=re.S)
+        out.append(svg.replace("<svg ", f'<svg aria-hidden="true" class="{cls}" ', 1))
+    return "".join(out)
+
+
 def home_html():
     text = open(os.path.join(HERE, "home", "index.html.in")).read()
+    text = text.replace("@theme-icons", theme_icons())
     for name, svg in ICONS.items():
         text = text.replace(f"@icon:{name}", svg.replace('class="zv-ico"', 'class="zv-ico" aria-hidden="true"'))
     text = text.replace("@github-svg", zv_site.GITHUB_SVG).replace("@ecosystem", eco_compact())

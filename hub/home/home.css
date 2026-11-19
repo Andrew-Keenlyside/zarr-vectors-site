@@ -68,13 +68,19 @@ code { font-family: var(--mono); font-size: 0.875em; }
 .zv-bar-links { display: flex; gap: 1.25rem; overflow-x: auto; scrollbar-width: none; }
 .zv-bar-link { position: relative; padding: 0.875rem 0; font-size: 0.9375rem; white-space: nowrap; }
 .zv-ext { font-size: 0.8em; margin-left: 0.15em; opacity: 0.7; }
-.zv-bar-gh { margin-left: auto; display: flex; padding: 0.5rem 0; flex-shrink: 0; }
+.zv-bar-end { margin-left: auto; display: flex; align-items: center; gap: 1.1rem; flex-shrink: 0; }
+.zv-bar-gh { display: flex; padding: 0.5rem 0; }
+.tt { display: flex; background: none; border: 0; padding: 0.5rem 0; cursor: pointer; color: var(--ink-2); }
+.tt:hover { color: var(--ink); }
+.tt svg { display: none; width: 1.2rem; height: 1.2rem; }
+.tt[data-mode="light"] .i-light, .tt[data-mode="dark"] .i-dark, .tt[data-mode="auto"] .i-auto-light { display: block; }
+@media (prefers-color-scheme: dark) { .tt[data-mode="auto"] .i-auto-light { display: none; } .tt[data-mode="auto"] .i-auto-dark { display: block; } }
 @media (max-width: 40em) {
-  .zv-bar { gap: 0.875rem; }
-  .zv-bar-home span, .zv-bar-gh { display: none; }
-  .zv-bar-home img { width: 26px; }
-  .zv-bar-links { gap: 0.875rem; }
-  .zv-bar-link { font-size: 0.875rem; }
+  .zv-bar { gap: 0.75rem; padding: 0 0.75rem; }
+  .zv-bar-home span, .zv-bar-gh, .zv-ext { display: none; }
+  .zv-bar-home img { width: 24px; }
+  .zv-bar-links { gap: 0.75rem; }
+  .zv-bar-link { font-size: 0.8125rem; }
 }
 
 /* ── buttons ─────────────────────────────────────────────────────────── */
@@ -141,8 +147,8 @@ code { font-family: var(--mono); font-size: 0.875em; }
 
 /* geometries: chapters beside one pinned scene that changes with them */
 .geo { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 3rem; }
-.geo-chapters { padding-bottom: 20vh; }
-.chap { min-height: 72vh; display: flex; flex-direction: column; justify-content: center; gap: 0.75rem; max-width: 28rem; opacity: 0.35; transition: opacity 0.4s ease; }
+.geo-chapters { padding-bottom: 8vh; }
+.chap { min-height: 48vh; display: flex; flex-direction: column; justify-content: center; gap: 0.75rem; max-width: 28rem; opacity: 0.35; transition: opacity 0.4s ease; }
 .chap.on { opacity: 1; }
 .chap h3 { font-size: 1.5rem; display: flex; align-items: center; gap: 0.75rem; }
 .chap h3 svg { width: 2.5rem; height: auto; flex-shrink: 0; }
@@ -159,7 +165,7 @@ code { font-family: var(--mono); font-size: 0.875em; }
   .geo { display: block; position: relative; }
   .geo-stage { position: sticky; top: auto; bottom: 0; height: 42svh; z-index: 2; background: linear-gradient(transparent, var(--bg) 14%); margin-top: -42svh; }
   .geo-chapters { padding-bottom: 46svh; }
-  .chap { min-height: 64svh; justify-content: flex-start; padding-top: 4svh; }
+  .chap { min-height: 40svh; justify-content: flex-start; padding-top: 3svh; }
   .geo-steps { bottom: 0.75rem; }
 }
 
@@ -239,3 +245,5 @@ footer .wrap { display: flex; justify-content: space-between; gap: 1rem 2rem; fl
   *, *::before, *::after { transition-duration: 0.01ms !important; }
   .js .hero-text .inner > *, .js .readout { opacity: 1; transform: none; }
 }
+
+@media (max-width: 380px) { .zv-bar, .zv-bar-links { gap: 0.55rem; } }

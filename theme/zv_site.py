@@ -58,6 +58,18 @@ GITHUB_SVG = (
 )
 
 
+# Furo's own toggle (light, dark, auto); its script cycles every .theme-toggle on the page
+THEME_TOGGLE = (
+    '<span class="theme-toggle-container zv-theme">'
+    '<button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">'
+    '<svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>'
+    '<svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>'
+    '<svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>'
+    '<svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>'
+    "</button></span>"
+)
+
+
 def urls():
     u = dict(DEFAULT_URLS)
     u.update(json.loads(os.environ.get("ZV_SITE_URLS", "{}")))
@@ -79,7 +91,10 @@ def topbar(site, u, mark_src):
         f'<a class="zv-bar-home" href="{u["home"]}"><img src="{mark_src}" alt="" width="30" height="20">'
         '<span>Zarr Vectors</span></a>'
         f'<span class="zv-bar-links">{"".join(items)}</span>'
+        '<span class="zv-bar-end">'
+        f'{THEME_TOGGLE}'
         f'<a class="zv-bar-gh" href="{u["github"]}" aria-label="Zarr Vectors on GitHub">{GITHUB_SVG}</a>'
+        '</span>'
         "</nav>"
     )
 

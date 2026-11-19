@@ -66,7 +66,7 @@ dl.field-list > dt { color: var(--color-brand-content); }
 .zv-bar a { text-decoration: none; color: var(--color-foreground-secondary); }
 .announcement-content .zv-bar a:hover { color: var(--color-foreground-primary); }
 
-.zv-bar-home, .zv-bar-gh { flex-shrink: 0; }
+.zv-bar-home, .zv-bar-end { flex-shrink: 0; }
 .zv-bar-home {
   display: flex; align-items: center; gap: 0.5rem;
   font-weight: 700; letter-spacing: -0.01em;
@@ -82,14 +82,21 @@ dl.field-list > dt { color: var(--color-brand-content); }
   height: 2px; border-radius: 1px; background: var(--color-brand-primary);
 }
 .zv-ext { font-size: 0.8em; margin-left: 0.15em; opacity: 0.7; }
-.zv-bar-gh { margin-left: auto; display: flex; padding: 0.5rem 0; }
+.zv-bar-end { margin-left: auto; display: flex; align-items: center; gap: 1.1rem; }
+.zv-bar-gh { display: flex; padding: 0.5rem 0; }
+.zv-bar .theme-toggle { padding: 0.5rem 0; }
+.zv-bar .theme-toggle svg { width: 1.2rem; height: 1.2rem; color: var(--color-foreground-secondary); }
+.zv-bar .theme-toggle:hover svg { color: var(--color-foreground-primary); }
+/* the bar's toggle replaces Furo's own */
+.theme-toggle-header, .theme-toggle-content { display: none !important; }
 
 @media (max-width: 40em) {
-  .zv-bar { gap: 0.875rem; }
-  .zv-bar-home span { display: none; }
-  .zv-bar-home img { width: 26px; }
-  .zv-bar-links { gap: 0.875rem; }
-  .zv-bar-link { font-size: 0.875rem; }
+  .announcement-content { padding: 0 0.75rem; }
+  .zv-bar { gap: 0.75rem; }
+  .zv-bar-home span, .zv-bar .zv-ext { display: none; }
+  .zv-bar-home img { width: 24px; }
+  .zv-bar-links { gap: 0.75rem; }
+  .zv-bar-link { font-size: 0.8125rem; }
   .zv-bar-gh { display: none; }
 }
 
@@ -212,3 +219,5 @@ a.zv-card:visited { color: inherit; }
   body:not([data-theme="light"]) .zv-ico { --ink: var(--zv-magenta-light); }
 }
 body[data-theme="dark"] .zv-ico { --ink: var(--zv-magenta-light); }
+
+@media (max-width: 380px) { .zv-bar, .zv-bar-links { gap: 0.55rem; } }

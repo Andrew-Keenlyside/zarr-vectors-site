@@ -157,15 +157,36 @@
     return out;
   }
 
+  // neurons: trees grown from a soma, a few dendrites each
+  function neurons(seed, somas, per) {
+    var r = rng(seed), pts = [], links = [];
+    somas.forEach(function (soma) {
+      var base = pts.length, tips = [], k, n = 3 + Math.floor(r() * 2);
+      pts.push(soma);
+      for (k = 0; k < n; k++) tips.push({ i: base, d: [gauss(r), gauss(r) * 0.8, gauss(r)], life: 6 + Math.floor(r() * 5) });
+      while (tips.length && pts.length - base < per) {
+        var tip = tips.shift(), p0 = pts[tip.i], d = tip.d;
+        d = [d[0] + gauss(r) * 0.22, d[1] + gauss(r) * 0.18, d[2] + gauss(r) * 0.22];
+        var m = Math.hypot(d[0], d[1], d[2]) || 1; d = [d[0] / m, d[1] / m, d[2] / m];
+        var np = [clamp(p0[0] + d[0] * 0.075, -0.97, 0.97), clamp(p0[1] + d[1] * 0.075, -0.97, 0.97), clamp(p0[2] + d[2] * 0.075, -0.97, 0.97)];
+        pts.push(np); links.push([tip.i, pts.length - 1]);
+        if (tip.life > 0) tips.push({ i: pts.length - 1, d: d, life: tip.life - 1 });
+        if (r() < 0.13) tips.push({ i: pts.length - 1, d: [d[2] + gauss(r) * 0.5, d[1] * 0.4 + gauss(r) * 0.4, -d[0] + gauss(r) * 0.5], life: 3 + Math.floor(r() * 5) });
+      }
+    });
+    return { pts: pts, links: links };
+  }
+
   /* ── hero: query the store ──────────────────────────────────────────── */
   var heroCanvas = document.getElementById("hero-canvas");
   var hero = heroCanvas && new Scene(heroCanvas);
   if (hero) {
     hero.cam = new Cam(-0.62, 0.42);
     hero.N = 4;
-    hero.pts = cloud(7, 420);
-    hero.lines = bundle(11, 6, 22, 0.09, 0).concat(bundle(12, 5, 22, 0.08, 1), bundle(13, 5, 22, 0.08, 2));
-    hero.q = [0.15, 0.1, 0.1]; hero.qt = [0.15, 0.1, 0.1]; hero.half = 0.32;
+    hero.pts = cloud(7, 320);
+    hero.sk = neurons(11, [[-0.45, 0.4, -0.3], [0.42, -0.4, 0.35], [0.35, 0.45, -0.45], [-0.35, -0.45, 0.45], [0.05, 0.05, 0.1], [0.5, 0.1, 0.5], [-0.5, -0.05, -0.55]], 115);
+    hero.skIn = new Uint8Array(hero.sk.pts.length);
+    hero.q = [0.15, 0.1, 0.1]; hero.qt = [0.15, 0.1, 0.1]; hero.half = 0.32; hero.vel = [0.31, 0.23, 0.27];
     hero.pointer = null; hero.t = 0;
     hero.drag = dragYaw(heroCanvas, hero);
     hero.readEl = document.getElementById("hero-read");
@@ -199,11 +220,19 @@
       var w = cam.un(S.pointer[0], S.pointer[1]);
       S.qt = [clamp(w[0], -0.7, 0.7), clamp(w[1], -0.7, 0.7), clamp(w[2], -0.7, 0.7)];
     } else if (!RM) {
-      var t = S.t * 0.22;
-      S.qt = [0.55 * Math.sin(t * 1.3), 0.4 * Math.sin(t * 0.9 + 1), 0.5 * Math.cos(t * 1.1)];
+      // like an old DVD screensaver: straight lines, bouncing off the store's walls
+      if (!S.bouncing) { S.bouncing = true; S.qt = S.q.slice(); }
+      var lim = 1 - S.half;
+      for (i = 0; i < 3; i++) {
+        S.qt[i] += S.vel[i] * dt;
+        if (S.qt[i] > lim) { S.qt[i] = 2 * lim - S.qt[i]; S.vel[i] = -Math.abs(S.vel[i]); S.bump = 1; }
+        else if (S.qt[i] < -lim) { S.qt[i] = -2 * lim - S.qt[i]; S.vel[i] = Math.abs(S.vel[i]); S.bump = 1; }
+      }
     }
-    var k = RM ? 1 : Math.min(1, dt * 6);
+    if (S.pointer && !S.drag.down) S.bouncing = false;
+    var k = RM || S.bouncing ? 1 : Math.min(1, dt * 6);
     for (i = 0; i < 3; i++) S.q[i] += (S.qt[i] - S.q[i]) * k;
+    S.bump = Math.max(0, (S.bump || 0) - dt * 3);
     var lo = [S.q[0] - S.half, S.q[1] - S.half, S.q[2] - S.half], hi = [S.q[0] + S.half, S.q[1] + S.half, S.q[2] + S.half];
     // the chunks the box touches: a block of whole chunks
     var cs = 2 / N, clo = [], chi = [];
@@ -219,17 +248,25 @@
     var bi = S.boxIn;
     drawBox(c, R, col["accent-ink"], 1.25, 0.75 * bi, col.tint, 0.14 * bi);
 
-    // streamlines: whole lines that pass through the box are returned
-    var hit = 0, a = S.tmp, b = S.tmp2;
-    for (i = 0; i < S.lines.length; i++) {
-      var L = S.lines[i], on = false;
-      for (j = 0; j < L.length; j++) if (inBox(L[j])) { on = bi > 0.5; break; }
-      if (on) hit++;
-      c.strokeStyle = on ? col["accent-ink"] : col.ink; c.lineWidth = on ? 1.8 : 1; c.globalAlpha = on ? 0.95 : 0.2;
-      c.beginPath();
-      for (j = 0; j < L.length; j++) { cam.p(L[j][0], L[j][1], L[j][2], a); if (j) c.lineTo(a[0], a[1]); else c.moveTo(a[0], a[1]); }
-      c.stroke();
+    // skeletons: the box returns the nodes inside it and the edges with both ends inside
+    var a = S.tmp, b = S.tmp2, K = S.sk, In = S.skIn, nIn = 0, eIn = 0, e;
+    for (i = 0; i < K.pts.length; i++) { In[i] = bi > 0.5 && inBox(K.pts[i]) ? 1 : 0; nIn += In[i]; }
+    c.strokeStyle = col.ink; c.lineWidth = 1.1; c.globalAlpha = 0.3; c.beginPath();
+    for (i = 0; i < K.links.length; i++) {
+      e = K.links[i]; if (In[e[0]] && In[e[1]]) continue;
+      var p0 = K.pts[e[0]], p1 = K.pts[e[1]];
+      cam.p(p0[0], p0[1], p0[2], a); cam.p(p1[0], p1[1], p1[2], b); c.moveTo(a[0], a[1]); c.lineTo(b[0], b[1]);
     }
+    c.stroke();
+    c.strokeStyle = col["accent-ink"]; c.lineWidth = 1.8; c.globalAlpha = 0.95; c.beginPath();
+    for (i = 0; i < K.links.length; i++) {
+      e = K.links[i]; if (!(In[e[0]] && In[e[1]])) continue;
+      eIn++; p0 = K.pts[e[0]]; p1 = K.pts[e[1]];
+      cam.p(p0[0], p0[1], p0[2], a); cam.p(p1[0], p1[1], p1[2], b); c.moveTo(a[0], a[1]); c.lineTo(b[0], b[1]);
+    }
+    c.stroke();
+    c.globalAlpha = 1; c.fillStyle = col.node; c.strokeStyle = col["accent-ink"]; c.lineWidth = 1.2;
+    for (i = 0; i < K.pts.length; i++) { if (!In[i]) continue; p0 = K.pts[i]; cam.p(p0[0], p0[1], p0[2], a); node(c, a[0], a[1], 2.1); }
     // points: exactly those inside
     var inside = 0;
     c.globalAlpha = 0.32; c.fillStyle = col.ink;
@@ -241,10 +278,10 @@
     c.globalAlpha = 1; c.fillStyle = col.node; c.strokeStyle = col["accent-ink"]; c.lineWidth = 1.3;
     for (i = 0; i < S.pts.length; i++) { p = S.pts[i]; if (!inBox(p) || bi <= 0.5) continue; cam.p(p[0], p[1], p[2], a); node(c, a[0], a[1], 2.6); }
     // the query box itself
-    drawBox(c, boxCorners(cam, lo, hi), col.ink, 1.1, 0.8 * bi, null, 0, [4, 4]);
+    drawBox(c, boxCorners(cam, lo, hi), S.bump > 0.05 ? col["accent-ink"] : col.ink, 1.1 + 1.4 * S.bump, (0.8 + 0.2 * S.bump) * bi, null, 0, [4, 4]);
     c.restore();
 
-    var txt = "box reads <b>" + touched + "</b> of " + N * N * N + " chunks · <b>" + inside + "</b> points · <b>" + hit + "</b> whole streamlines";
+    var txt = "box reads <b>" + touched + "</b> of " + N * N * N + " chunks · <b>" + inside + "</b> points · <b>" + nIn + "</b> skeleton nodes, <b>" + eIn + "</b> edges";
     if (txt !== S.lastTxt) { S.readEl.innerHTML = txt; S.lastTxt = txt; }
   }
 
@@ -507,123 +544,163 @@
     // apex, left, front, right on top; left, front, right below; the hidden back corner
     cube: [[316, 4], [180, 66], [316, 128], [452, 66], [180, 259], [316, 321], [452, 259], [316, 197]],
   };
-  function intro(done) {
+  function intro(onText, done) {
     var ov = document.createElement("canvas");
     ov.setAttribute("aria-hidden", "true");
     ov.style.cssText = "position:fixed;inset:0;width:100vw;height:100vh;z-index:30;pointer-events:none";
     document.body.appendChild(ov);
     var c = ov.getContext("2d"), W = window.innerWidth, H = window.innerHeight;
     ov.width = W * DPR; ov.height = H * DPR;
-    var img = new Image(); img.src = "_static/zv-mark.png";
     var mw = Math.min(W * 0.46, 300), sc = mw / MARK.w, mx = W / 2 - mw / 2, my = H / 2 - MARK.h * sc / 2;
     function M(p) { return [mx + p[0] * sc, my + p[1] * sc]; }
     hero.resize(); hero.layout(); hero.cam.upd();
     var r = heroCanvas.getBoundingClientRect(), cam = hero.cam, a = [0, 0, 0, 0];
+
     // where everything ends up: the hero's first frame, in screen coordinates
     var verts = [];
     hero.pts.forEach(function (p) { cam.p(p[0], p[1], p[2], a); verts.push([a[0] + r.left, a[1] + r.top]); });
-    var lineStart = verts.length;
-    hero.lines.forEach(function (L) { L.forEach(function (p) { cam.p(p[0], p[1], p[2], a); verts.push([a[0] + r.left, a[1] + r.top]); }); });
-    var corners = boxCorners(cam, [-1, -1, -1], [1, 1, 1]).map(function (q) { return [q[0] + r.left, q[1] + r.top]; });
+    var skStart = verts.length;
+    hero.sk.pts.forEach(function (p) { cam.p(p[0], p[1], p[2], a); verts.push([a[0] + r.left, a[1] + r.top]); });
+    var store = boxCorners(cam, [-1, -1, -1], [1, 1, 1]);
+    var corners = store.map(function (q) { return [q[0] + r.left, q[1] + r.top]; });
     var nodesM = MARK.nodes.map(M), cubeM = MARK.cube.map(M);
-    // each logo node becomes the nearest point of the cloud; every other vertex leaves from its nearest logo node
+    function d2(p, q) { return (p[0] - q[0]) * (p[0] - q[0]) + (p[1] - q[1]) * (p[1] - q[1]); }
+
+    function norm2(list) {
+      var x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+      list.forEach(function (p) { x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]); x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]); });
+      return list.map(function (p) { return [(p[0] - x0) / (x1 - x0 || 1), (p[1] - y0) / (y1 - y0 || 1)]; });
+    }
+    // each logo node becomes the nearest vertex; every other vertex leaves from its nearest logo node
     var claimed = {}, nodeTo = nodesM.map(function (n) {
       var best = -1, bd = 1e18;
-      for (var i = 0; i < lineStart; i++) { if (claimed[i]) continue; var d = Math.pow(verts[i][0] - n[0], 2) + Math.pow(verts[i][1] - n[1], 2); if (d < bd) { bd = d; best = i; } }
+      for (var i = 0; i < verts.length; i++) { if (claimed[i]) continue; var d = d2(verts[i], n); if (d < bd) { bd = d; best = i; } }
       claimed[best] = 1; return best;
     });
-    var from = verts.map(function (v) {
+    // sources are matched by place within each shape (the logo's nodes, the store on screen), so the
+    // vertices pour out of every node, not just the ones nearest the store
+    var from = [], maxd = 1, nN = norm2(nodesM), nV = norm2(verts);
+    verts.forEach(function (v, i) {
       var best = 0, bd = 1e18;
-      nodesM.forEach(function (n, j) { var d = Math.pow(v[0] - n[0], 2) + Math.pow(v[1] - n[1], 2); if (d < bd) { bd = d; best = j; } });
-      return nodesM[best];
+      nN.forEach(function (n, j) { var d = d2(nV[i], n); if (d < bd) { bd = d; best = j; } });
+      from.push(nodesM[best]); maxd = Math.max(maxd, Math.sqrt(d2(v, nodesM[best])));
     });
+    // a staggered wave: near vertices leave first, far ones a little later, each on a gentle curve
+    var rr = rng(99), delay = [], bend = [];
+    verts.forEach(function (v, i) { delay.push(0.28 * Math.sqrt(d2(v, from[i])) / maxd + 0.1 * rr()); bend.push((rr() - 0.5) * 0.5); });
+    nodeTo.forEach(function (i, k) { from[i] = nodesM[k]; delay[i] = 0; bend[i] = 0.12; });   // a logo node leaves from itself
+
     // cube corners onto the store's corners, matched by place within each shape's bounds
     function norm(list) {
       var x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
       list.forEach(function (p) { x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]); x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]); });
       return list.map(function (p) { return [(p[0] - x0) / (x1 - x0), (p[1] - y0) / (y1 - y0)]; });
     }
-    var nc = norm(cubeM.slice(0, 7)), nt = norm(corners), cornerFrom = new Array(8), used = {};
-    // the hidden back corner of the logo is the store corner furthest from the camera
-    var depth = boxCorners(cam, [-1, -1, -1], [1, 1, 1]).map(function (q) { return q[2]; }), back = 0;
-    depth.forEach(function (z, i) { if (z < depth[back]) back = i; });
+    var nc = norm(cubeM.slice(0, 7)), nt = norm(corners), cornerFrom = new Array(8), used = {}, back = 0;
+    store.forEach(function (q, i) { if (q[2] < store[back][2]) back = i; });   // the logo's hidden corner is the far one
     cornerFrom[back] = cubeM[7]; used[back] = 1;
     nc.forEach(function (p, j) {
       var best = -1, bd = 1e9;
-      nt.forEach(function (q, i) { if (used[i]) return; var d = Math.pow(p[0] - q[0], 2) + Math.pow(p[1] - q[1], 2); if (d < bd) { bd = d; best = i; } });
+      nt.forEach(function (q, i) { if (used[i]) return; var d = d2(p, q); if (d < bd) { bd = d; best = i; } });
       used[best] = 1; cornerFrom[best] = cubeM[j];
     });
+    function cornerOf(j) { return cornerFrom.indexOf(cubeM[j]); }
 
-    var D = W < 700 ? 2.0 : 2.5, t0 = performance.now(), stopped = false;
+    // one timeline: the mark arrives, rests a moment, then opens; the words start before it settles
+    var D = W < 700 ? 2.7 : 3.1, OPEN = 0.75, t0 = performance.now(), stopped = false, texted = false;
     function finish() {
       if (stopped) return; stopped = true;
       ["wheel", "touchstart", "keydown", "pointerdown"].forEach(function (e) { window.removeEventListener(e, finish); });
-      ov.style.transition = "opacity .25s ease"; ov.style.opacity = "0";
-      setTimeout(function () { ov.remove(); }, 300);
+      if (!texted) onText();
       done();
+      ov.style.transition = "opacity .3s ease"; ov.style.opacity = "0";
+      setTimeout(function () { ov.remove(); }, 350);
     }
     ["wheel", "touchstart", "keydown", "pointerdown"].forEach(function (e) { window.addEventListener(e, finish, { passive: true }); });
-
-    function draw(now) {
-      if (stopped) return;
-      var t = (now - t0) / 1000;
-      c.setTransform(DPR, 0, 0, DPR, 0, 0); c.clearRect(0, 0, W, H);
-      var show = smooth(0, 0.35, t), u = ease(smooth(0.55, D - 0.35, t)), s = 0.97 + 0.03 * smooth(0, 0.5, t);
-      // 1. the mark itself
-      if (u < 0.02 && img.complete && img.naturalWidth) {
-        c.globalAlpha = show;
-        c.drawImage(img, W / 2 - mw * s / 2, H / 2 - MARK.h * sc * s / 2, mw * s, MARK.h * sc * s);
-        c.globalAlpha = 1;
-      } else {
-        var accent = col["accent-ink"], lw = lerp(9 * sc, 1.1, u);
-        // the cube: solid at first, opening into the store's outline and then its chunks
-        var P = cornerFrom.map(function (p, i) { return [lerp(p[0], corners[i][0], u), lerp(p[1], corners[i][1], u)]; });
-        var hexOrder = [0, 1, 4, 5, 6, 3].map(function (j) { return P[cornerFrom.indexOf(cubeM[j])]; });
-        c.globalAlpha = Math.pow(1 - u, 2); c.fillStyle = accent; c.beginPath(); hexOrder.forEach(function (p, i) { if (i) c.lineTo(p[0], p[1]); else c.moveTo(p[0], p[1]); }); c.closePath(); c.fill();
-        // the white edges drawn on the logo's cube: the top face's front edges and a broken front edge
-        var Pc = function (j) { return P[cornerFrom.indexOf(cubeM[j])]; }, l1 = Pc(1), f2 = Pc(2), r3 = Pc(3), b5 = Pc(5);
-        c.globalAlpha = Math.pow(1 - u, 3); c.strokeStyle = col.node; c.lineWidth = 5 * sc; c.lineCap = "round";
-        c.beginPath(); c.moveTo(l1[0], l1[1]); c.lineTo(f2[0], f2[1]); c.lineTo(r3[0], r3[1]); c.stroke();
-        c.beginPath();
-        [[0.06, 0.38], [0.5, 0.62], [0.74, 0.86]].forEach(function (d) { c.moveTo(lerp(f2[0], b5[0], d[0]), lerp(f2[1], b5[1], d[0])); c.lineTo(lerp(f2[0], b5[0], d[1]), lerp(f2[1], b5[1], d[1])); });
-        c.stroke();
-        c.globalAlpha = smooth(0.15, 0.6, u) * (col.dark ? 0.4 : 0.32); c.strokeStyle = col.ink; c.lineWidth = 1;
-        c.beginPath(); BOX_E.forEach(function (e) { c.moveTo(P[e[0]][0], P[e[0]][1]); c.lineTo(P[e[1]][0], P[e[1]][1]); }); c.stroke();
-        if (u > 0.55) {
-          c.save(); c.translate(r.left, r.top); lattice(c, cam, hero.N, (col.dark ? 0.1 : 0.075) * smooth(0.55, 1, u), 0); c.restore();
-        }
-        // logo links fade as the nodes leave
-        c.globalAlpha = Math.pow(1 - u, 1.5); c.strokeStyle = accent; c.lineWidth = lw; c.lineCap = "round";
-        var NP2 = nodesM.map(function (n, j) { var v = verts[nodeTo[j]]; return [lerp(n[0], v[0], u), lerp(n[1], v[1], u)]; });
-        var tri = MARK.tri.map(function (j) { return NP2[j]; });
-        c.fillStyle = col.tint; c.beginPath(); c.moveTo(tri[0][0], tri[0][1]); c.lineTo(tri[1][0], tri[1][1]); c.lineTo(tri[2][0], tri[2][1]); c.closePath(); c.fill();
-        c.beginPath();
-        MARK.links.forEach(function (l) {
-          var p = NP2[l[0]], q = typeof l[1] === "number" ? NP2[l[1]] : (function () { var m = M(l[1]); return [lerp(m[0], p[0], u), lerp(m[1], p[1], u)]; })();
-          c.moveTo(p[0], p[1]); c.lineTo(q[0], q[1]);
-        });
-        c.stroke();
-        // streamlines draw in behind
-        if (u > 0.4) {
-          c.globalAlpha = 0.2 * smooth(0.4, 1, u); c.strokeStyle = col.ink; c.lineWidth = 1;
-          var off = lineStart;
-          hero.lines.forEach(function (L) {
-            c.beginPath();
-            for (var j = 0; j < L.length; j++) { var v = verts[off + j], fp = from[off + j]; var x = lerp(fp[0], v[0], u), y = lerp(fp[1], v[1], u); if (j) c.lineTo(x, y); else c.moveTo(x, y); }
-            c.stroke(); off += L.length;
-          });
-        }
-        // the cloud leaves the logo's nodes
-        c.globalAlpha = smooth(0.1, 0.7, u) * 0.32; c.fillStyle = col.ink;
-        for (var i = 0; i < lineStart; i++) { var v = verts[i], fp = from[i]; c.fillRect(lerp(fp[0], v[0], u) - 1, lerp(fp[1], v[1], u) - 1, 2, 2); }
-        // and the logo's own nodes, shrinking into vertices
-        c.globalAlpha = 1 - smooth(0.75, 1, u); c.fillStyle = col.node; c.strokeStyle = accent; c.lineWidth = lerp(9 * sc, 1.3, u);
-        NP2.forEach(function (p) { node(c, p[0], p[1], lerp(21.5 * sc, 2.6, u)); });
-        c.globalAlpha = 1;
-      }
-      if (t >= D) finish(); else requestAnimationFrame(draw);
+    function easeOut(t) { return 1 - Math.pow(1 - t, 3); }
+    // a point on its way: eased along a slight arc
+    function travel(p, q, u, b, out) {
+      var x = lerp(p[0], q[0], u), y = lerp(p[1], q[1], u), dx = q[0] - p[0], dy = q[1] - p[1], k = Math.sin(Math.PI * u) * b;
+      out[0] = x - dy * k; out[1] = y + dx * k; return out;
     }
-    if (img.complete) requestAnimationFrame(draw); else { img.onload = img.onerror = function () { requestAnimationFrame(draw); }; }
+    var U = new Float32Array(verts.length), X = new Float32Array(verts.length * 2), tmp = [0, 0];
+
+    function draw() {
+      if (stopped) return;
+      var t = (performance.now() - t0) / 1000;
+      var appear = easeOut(clamp(t / 0.55, 0, 1));
+      var g = clamp((t - OPEN) / (D - OPEN), 0, 1);           // the opening, 0 to 1
+      c.setTransform(DPR, 0, 0, DPR, 0, 0); c.clearRect(0, 0, W, H);
+      // the mark grows in from the middle while it appears
+      var s = 0.9 + 0.1 * appear;
+      c.translate(W / 2, H / 2); c.scale(s, s); c.translate(-W / 2, -H / 2);
+      var accent = col["accent-ink"], i, j;
+
+      // the cube: solid, then opening into the store's outline, then its chunks
+      var uc = ease(clamp((g - 0.04) / 0.8, 0, 1));
+      var P = cornerFrom.map(function (p, k) { return [lerp(p[0], corners[k][0], uc), lerp(p[1], corners[k][1], uc)]; });
+      var hex = [0, 1, 4, 5, 6, 3].map(function (k) { return P[cornerOf(k)]; });
+      c.globalAlpha = appear * (1 - smooth(0, 0.32, g)); c.fillStyle = accent;
+      c.beginPath(); hex.forEach(function (p, k) { if (k) c.lineTo(p[0], p[1]); else c.moveTo(p[0], p[1]); }); c.closePath(); c.fill();
+      var l1 = P[cornerOf(1)], f2 = P[cornerOf(2)], r3 = P[cornerOf(3)], b5 = P[cornerOf(5)];
+      c.globalAlpha = appear * (1 - smooth(0, 0.3, g)); c.strokeStyle = col.node; c.lineWidth = 5 * sc; c.lineCap = "round";
+      c.beginPath(); c.moveTo(l1[0], l1[1]); c.lineTo(f2[0], f2[1]); c.lineTo(r3[0], r3[1]);
+      [[0.06, 0.38], [0.5, 0.62], [0.74, 0.86]].forEach(function (d) { c.moveTo(lerp(f2[0], b5[0], d[0]), lerp(f2[1], b5[1], d[0])); c.lineTo(lerp(f2[0], b5[0], d[1]), lerp(f2[1], b5[1], d[1])); });
+      c.stroke();
+      c.globalAlpha = smooth(0.08, 0.55, g) * (col.dark ? 0.4 : 0.32); c.strokeStyle = col.ink; c.lineWidth = 1;
+      c.beginPath(); BOX_E.forEach(function (e) { c.moveTo(P[e[0]][0], P[e[0]][1]); c.lineTo(P[e[1]][0], P[e[1]][1]); }); c.stroke();
+      var la = smooth(0.5, 1, g);
+      if (la > 0) { c.save(); c.translate(r.left, r.top); lattice(c, cam, hero.N, (col.dark ? 0.1 : 0.075) * la, 0); c.restore(); }
+
+      // every vertex's own progress along the wave
+      for (i = 0; i < verts.length; i++) {
+        var ui = ease(clamp((g - delay[i]) / 0.62, 0, 1)); U[i] = ui;
+        travel(from[i], verts[i], ui, bend[i], tmp); X[i * 2] = tmp[0]; X[i * 2 + 1] = tmp[1];
+      }
+      // skeleton edges draw in as both their ends arrive
+      var E = hero.sk.links;
+      c.strokeStyle = col.ink; c.lineWidth = 1;
+      for (var band = 1; band <= 4; band++) {
+        c.globalAlpha = 0.3 * band / 4; c.beginPath();
+        for (j = 0; j < E.length; j++) {
+          var ia = skStart + E[j][0], ib = skStart + E[j][1], w = smooth(0.72, 1, Math.min(U[ia], U[ib]));   // an edge appears as its ends settle
+          if (Math.ceil(w * 4) !== band || w <= 0) continue;
+          c.moveTo(X[ia * 2], X[ia * 2 + 1]); c.lineTo(X[ib * 2], X[ib * 2 + 1]);
+        }
+        c.stroke();
+      }
+      // the logo's links thin and fade as their nodes leave
+      var NP2 = nodeTo.map(function (k) { return [X[k * 2], X[k * 2 + 1]]; }), un = U[nodeTo[0]];
+      c.globalAlpha = appear * (1 - smooth(0, 0.5, g)); c.strokeStyle = accent; c.lineWidth = lerp(9 * sc, 1.2, un);
+      var tri = MARK.tri.map(function (k) { return NP2[k]; });
+      c.fillStyle = col.tint; c.beginPath(); c.moveTo(tri[0][0], tri[0][1]); c.lineTo(tri[1][0], tri[1][1]); c.lineTo(tri[2][0], tri[2][1]); c.closePath(); c.fill();
+      c.beginPath();
+      MARK.links.forEach(function (l) {
+        var p = NP2[l[0]], q;
+        if (typeof l[1] === "number") q = NP2[l[1]]; else { var m = M(l[1]); q = [lerp(m[0], p[0], un), lerp(m[1], p[1], un)]; }
+        c.moveTo(p[0], p[1]); c.lineTo(q[0], q[1]);
+      });
+      c.stroke();
+      // the cloud and the skeletons' vertices pour out of the nodes
+      c.fillStyle = col.ink;
+      for (i = 0; i < verts.length; i++) {
+        if (claimed[i] || U[i] <= 0) continue;
+        c.globalAlpha = (i < skStart ? 0.32 : 0.0) * smooth(0, 0.35, U[i]) + (i >= skStart ? 0.3 * Math.sin(Math.PI * U[i]) : 0);
+        if (c.globalAlpha > 0.01) c.fillRect(X[i * 2] - 1, X[i * 2 + 1] - 1, 2, 2);
+      }
+      // and the logo's own nodes shrink into vertices as they land
+      c.fillStyle = col.node; c.strokeStyle = accent;
+      NP2.forEach(function (p, k) {
+        var u = U[nodeTo[k]];
+        c.globalAlpha = appear * (1 - smooth(0.7, 1, u)); c.lineWidth = lerp(9 * sc, 1.3, u);
+        node(c, p[0], p[1], lerp(21.5 * sc, 2.4, u));
+      });
+      c.globalAlpha = 1;
+
+      if (!texted && g > 0.72) { texted = true; onText(); }
+      if (g >= 1) finish(); else requestAnimationFrame(draw);
+    }
+    requestAnimationFrame(draw);
   }
 
   /* ── start ──────────────────────────────────────────────────────────── */
@@ -635,10 +712,34 @@
   window.addEventListener("scroll", function () { if (stage) stage.dirty = true; }, { passive: true });
 
   var heroEl = document.getElementById("hero");
-  function ready() { introOn = false; if (heroEl) heroEl.classList.add("ready"); if (hero) hero.dirty = true; }
-  if (hero && !RM && (window.scrollY || 0) < 40) { introOn = true; intro(ready); }
+  function showText() { if (heroEl) heroEl.classList.add("ready"); }
+  function ready() { introOn = false; showText(); if (hero) hero.dirty = true; }
+  if (hero && !RM && (window.scrollY || 0) < 40) { introOn = true; intro(showText, ready); }
   else ready();
   requestAnimationFrame(frame);
+
+  /* ── theme toggle: the same cycle and storage as the docs' (Furo) ──────── */
+  var tt = document.getElementById("theme-toggle");
+  function applyTheme(mode) {
+    if (mode === "light" || mode === "dark") document.documentElement.dataset.theme = mode;
+    else delete document.documentElement.dataset.theme;
+    if (tt) {
+      tt.dataset.mode = mode;
+      tt.setAttribute("aria-label", "Colour theme: " + (mode === "auto" ? "match system" : mode));
+    }
+    readColours();
+  }
+  if (tt) {
+    var stored = "auto";
+    try { stored = localStorage.getItem("theme") || "auto"; } catch (e) {}
+    applyTheme(stored);
+    tt.addEventListener("click", function () {
+      var cur = tt.dataset.mode, dark = mq.matches;
+      var next = dark ? (cur === "auto" ? "light" : cur === "light" ? "dark" : "auto") : (cur === "auto" ? "dark" : cur === "dark" ? "light" : "auto");
+      try { localStorage.setItem("theme", next); } catch (e) {}
+      applyTheme(next);
+    });
+  }
 
   /* ── tabs and copy buttons ──────────────────────────────────────────── */
   var tabs = Array.prototype.slice.call(document.querySelectorAll('[role="tab"]'));
