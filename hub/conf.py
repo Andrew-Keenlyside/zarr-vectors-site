@@ -80,6 +80,12 @@ def home_html():
     for name, svg in ICONS.items():
         text = text.replace(f"@icon:{name}", svg.replace('class="zv-ico"', 'class="zv-ico" aria-hidden="true"'))
     text = text.replace("@github-svg", zv_site.GITHUB_SVG).replace("@ecosystem", eco_compact())
+    # version the page's own files by their contents, so a browser never pairs a new page with an old
+    # cached script or stylesheet (GitHub Pages lets browsers reuse files for ten minutes unchecked)
+    import hashlib
+    for name in ("home.css", "home.js"):
+        digest = hashlib.sha256(open(os.path.join(HERE, "home", name), "rb").read()).hexdigest()[:10]
+        text = text.replace(f'"{name}"', f'"{name}?v={digest}"')
     return fill_paths(text)
 
 
